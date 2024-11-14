@@ -2,7 +2,7 @@ from kafka import KafkaConsumer
 import json
 
 consumer = KafkaConsumer(
-    'emoji_topic',  
+    'emoji-topic',  
     bootstrap_servers='localhost:9092',
     auto_offset_reset='earliest',  
     enable_auto_commit=True,  

@@ -29,7 +29,7 @@ async def handle_emoji():
             "timestamp": timestamp
         }
 
-        await send_to_kafka("emoji_topic", msg)
+        await send_to_kafka("emoji-topic", msg)
         return jsonify({"status": "Message queued"}), 200
 
 if __name__ == '__main__':

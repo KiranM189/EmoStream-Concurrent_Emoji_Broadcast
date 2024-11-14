@@ -1,76 +1,72 @@
 from pyspark.sql import SparkSession
-from pyspark.sql.functions import window
-from pyspark.sql.functions import to_timestamp
-from pyspark.sql.functions import expr, from_json, col, count, window, floor, lit
+from pyspark.sql.functions import from_json, col, window, count
 from pyspark.sql.types import StructType, StructField, StringType, TimestampType
 
-# Create Spark Session
+# Create Spark session
 spark = (
     SparkSession
     .builder
-    .appName("Emoji Aggregation from Kafka")
-    .config("spark.streaming.stopGracefullyOnShutdown", True)
-    .config('spark.jars.packages', 'org.apache.spark:spark-sql-kafka-0-10_2.12:3.3.0')
-    .config("spark.sql.shuffle.partitions", 4)
-    .master("local[*]")
+    .appName("KafkaEmojiAggregation")
+    .config("spark.streaming.stopGracefullyOnShutdown", "true")
+    .config("spark.sql.shuffle.partitions", "4")
+    .config("spark.jars.packages", "org.apache.spark:spark-sql-kafka-0-10_2.12:3.5.3")
     .getOrCreate()
 )
 
-# Read from Kafka topic
+# Define the schema of the JSON data
+json_schema = StructType([
+    StructField("user_id", StringType(), True),
+    StructField("emoji_type", StringType(), True),
+    StructField("timestamp", StringType(), True)  
+])
+
+# Read data from Kafka
 kafka_df = (
     spark
     .readStream
     .format("kafka")
-    .option("kafka.bootstrap.servers", "ed-kafka:29092")
-    .option("subscribe", "emoji-data")
+    .option("kafka.bootstrap.servers", "localhost:9092")  
+    .option("subscribe", "emoji-topic")  
     .option("startingOffsets", "earliest")
     .load()
 )
 
-# Cast Kafka 'value' field as string
-kafka_json_df = kafka_df.withColumn("value", expr("cast(value as string)"))
+# Cast Kafka message value to String and parse the JSON
+kafka_json_df = kafka_df.withColumn("value", col("value").cast("string"))
+parsed_df = kafka_json_df.withColumn("jsonData", from_json(col("value"), json_schema)).select("jsonData.*")
 
-# Define schema for the JSON data
-json_schema = (
-    StructType(
-    [StructField('user_id', StringType(), True), 
-     StructField('emoji', StringType(), True), 
-     StructField('time_stamp', StringType(), True)  # time_stamp will be converted later
-    ])
-)
+# Convert the string to timestamp 
+parsed_df = parsed_df.withColumn("timestamp", col("timestamp").cast(TimestampType()))
 
-# Parse the JSON data from the 'value' column
-streaming_df = kafka_json_df.withColumn("values_json", from_json(col("value"), json_schema)).selectExpr("values_json.*")
-
-# Convert 'time_stamp' column to TimestampType
-streaming_df = streaming_df.withColumn("time_stamp", to_timestamp(col("time_stamp"), "yyyy-MM-dd HH:mm:ss"))
-
-# Aggregate emojis in 2-second windows
+# Perform aggregation on emoji_type 
 aggregated_df = (
-    streaming_df
+    parsed_df
+    .withWatermark("timestamp", "2 seconds")  
     .groupBy(
-        window(col("time_stamp"), "2 seconds"),  # Aggregate in 2-second intervals
-        col("emoji")
+        window(col("timestamp"), "2 seconds"),  
+        col("emoji_type")
     )
-    .agg(count("emoji").alias("emoji_count"))  # Count occurrences of each emoji
-    .withColumn("aggregated_emoji_count",floor(col("emoji_count") / 1000))  # Aggregate into units of 1000
-    .withColumn("aggregated_emoji_count", 
-                expr("if(aggregated_emoji_count == 0, 1, aggregated_emoji_count)"))  # Ensure at least 1 if count < 1000
+    .agg(count("emoji_type").alias("emoji_count"))  
 )
 
-# You can send this aggregated result back to Kafka or clients.
+# Convert to JSON
 output_df = aggregated_df.selectExpr("cast(window.start as string) as key", "to_json(struct(*)) as value")
 
+# Write stream to Kafka
 query = (
     output_df
     .writeStream
     .format("kafka")
-    .option("kafka.bootstrap.servers", "ed-kafka:29092")
-    .option("topic", "emoji-aggregated")
-    .option("checkpointLocation", "/tmp/checkpoints")
-    .trigger(processingTime="2 seconds")  # Trigger every 2 seconds
+    .option("kafka.bootstrap.servers", "localhost:9092")  
+    .option("topic", "emoji-aggregated") 
+    .option("checkpointLocation", "/tmp/checkpoints")  
+    .outputMode("append")  
+    .trigger(processingTime="2 seconds")  
     .start()
 )
 
-# Await termination to keep the stream running
 query.awaitTermination()
+
+#/usr/local/kafka/bin/kafka-topics.sh --create --topic emoji-topic --bootstrap-server localhost:9092
+
+#/usr/local/kafka/bin/kafka-topics.sh --create --topic emoji-aggregated --bootstrap-server localhost:9092
