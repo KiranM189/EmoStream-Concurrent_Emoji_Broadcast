@@ -1,30 +1,34 @@
-from flask import Flask, Response
 from kafka import KafkaConsumer
+from kafka import KafkaProducer
 import json
-import threading
+import math
 
-app = Flask(__name__)
-
-# Function to create a new consumer for each client
-def create_consumer():
-    return KafkaConsumer(
-        'sub_1',
+def cluster_publisher():
+    consumer = KafkaConsumer(
+        'cluster_1',
         bootstrap_servers='localhost:9092',
         value_deserializer=lambda x: json.loads(x.decode('utf-8')),
-        #auto_offset_reset='earliest',  # This can be modified as needed
+        #auto_offset_reset='earliest',
         #enable_auto_commit=True,
-        #group_id=None  # No group ID ensures each consumer gets its own copy of messages
+        #group_id=f'cluster-{cluster_id}-group'  # Unique group for each cluster
     )
 
-# Generator function for sending emojis to clients
-def send_emoji():
-    consumer = create_consumer()  # Create a new consumer for each client
-    for msg in consumer:
-        yield f"data: {json.dumps(msg.value)}\n\n"  # Formatting as Server-Sent Events (SSE)
+    print(f"Cluster Publisher started consuming from 'cluster_topic'...")
 
-@app.route('/sub1')
-def stream():
-    return Response(send_emoji(), content_type='text/event-stream')
+    for message in consumer:
+        emoji_data = message.value
+        for i in range(0,int(math.ceil(emoji_data["emoji_count_aggregated"]))):
+            emoji_type = emoji_data['emoji_type']
+            print(f"Cluster Publisher received emoji_type: {emoji_type}")
+            forward_to_subscribers(emoji_type)
+
+def forward_to_subscribers(emoji_data):
+    producer = KafkaProducer(
+        bootstrap_servers='localhost:9092',
+        value_serializer=lambda v: json.dumps(v).encode('utf-8')
+    )
+    producer.send('sub_1',emoji_data)
+    #producer.send('sub_2',emoji_type)
 
 if __name__ == '__main__':
-    app.run(debug=True, port=5050)
+    cluster_publisher()
