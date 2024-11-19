@@ -11,15 +11,14 @@ producer = KafkaProducer(
     value_serializer=lambda v: json.dumps(v).encode('utf-8')
 )
 
-async def send_to_kafka(topic, message):
-    producer.send(topic, message)
+async def flush_interval():
     await asyncio.sleep(0.5)
     producer.flush()
 
 
 @app.route('/send_emoji', methods=['POST'])
 async def handle_emoji():
-        data = request.get_json()  # Get the JSON data from the request
+        data = request.get_json()  
         user_id = data.get('user_id')
         emoji_type = data.get('emoji_type')
         timestamp = data.get('timestamp')
@@ -28,9 +27,8 @@ async def handle_emoji():
             "emoji_type": emoji_type,
             "timestamp": timestamp
         }
-
-        await send_to_kafka("emoji-topic", msg)
+        producer.send("emoji-topic", data)
+        await flush_interval()
         return jsonify({"status": "Message queued"}), 200
-
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)

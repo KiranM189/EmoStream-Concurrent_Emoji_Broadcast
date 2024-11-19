@@ -1,5 +1,5 @@
 from pyspark.sql import SparkSession
-from pyspark.sql.functions import from_json, col, window, count
+from pyspark.sql.functions import from_json, col, window, count, when
 from pyspark.sql.types import StructType, StructField, StringType, TimestampType
 
 # Create Spark session
@@ -46,7 +46,9 @@ aggregated_df = (
         window(col("timestamp"), "2 seconds"),  
         col("emoji_type")
     )
-    .agg(count("emoji_type").alias("emoji_count"))  
+    .agg(when(count("emoji_type") < 1000, 1)  # If count < 1000, set it to 1
+        .otherwise(count("emoji_type") / 1000)  # Else, scale it by dividing by 1000
+        .alias("emoji_count"))  
 )
 
 # Convert to JSON
