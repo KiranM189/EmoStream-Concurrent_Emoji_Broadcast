@@ -7,7 +7,9 @@ producer = KafkaProducer(
     value_serializer=lambda v: json.dumps(v).encode('utf-8'),
     linger_ms=500  # Flush interval of 500 milliseconds
 )
-
+@app.route('/register',method=['POST'])
+def handle_registration:
+    
 @app.route('/send_emoji', methods=['POST'])
 def handle_emoji():
     data = request.get_json()

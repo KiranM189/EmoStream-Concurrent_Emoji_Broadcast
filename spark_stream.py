@@ -2,7 +2,6 @@ from pyspark.sql import SparkSession
 from pyspark.sql.functions import from_json, col, window, count, when
 from pyspark.sql.types import StructType, StructField, StringType, TimestampType
 
-# Create Spark session
 spark = (
     SparkSession
     .builder
@@ -13,14 +12,12 @@ spark = (
     .getOrCreate()
 )
 
-# Define the schema of the JSON data
 json_schema = StructType([
     StructField("user_id", StringType(), True),
     StructField("emoji_type", StringType(), True),
     StructField("timestamp", StringType(), True)  
 ])
 
-# Read data from Kafka
 kafka_df = (
     spark
     .readStream
@@ -31,14 +28,11 @@ kafka_df = (
     .load()
 )
 
-# Cast Kafka message value to String and parse the JSON
 kafka_json_df = kafka_df.withColumn("value", col("value").cast("string"))
 parsed_df = kafka_json_df.withColumn("jsonData", from_json(col("value"), json_schema)).select("jsonData.*")
 
-# Convert the string to timestamp 
 parsed_df = parsed_df.withColumn("timestamp", col("timestamp").cast(TimestampType()))
 
-# Perform aggregation on emoji_type 
 aggregated_df = (
     parsed_df
     .withWatermark("timestamp", "2 seconds")  
@@ -46,15 +40,14 @@ aggregated_df = (
         window(col("timestamp"), "2 seconds"),  
         col("emoji_type")
     )
-    .agg(when(count("emoji_type") < 1000, 1)  # If count < 1000, set it to 1
-        .otherwise(count("emoji_type") / 1000)  # Else, scale it by dividing by 1000
-        .alias("emoji_count"))  
+    .agg((count("emoji_type")).alias("emoji_count"),
+         when(count("emoji_type") < 10, 1)  
+        .otherwise(count("emoji_type") / 10)  
+        .alias("emoji_count_aggregated"))  
 )
 
-# Convert to JSON
 output_df = aggregated_df.selectExpr("cast(window.start as string) as key", "to_json(struct(*)) as value")
 
-# Write stream to Kafka
 query = (
     output_df
     .writeStream

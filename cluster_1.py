@@ -1,6 +1,7 @@
 from kafka import KafkaConsumer
 from kafka import KafkaProducer
 import json
+import math
 
 def cluster_publisher():
     consumer = KafkaConsumer(
@@ -16,7 +17,7 @@ def cluster_publisher():
 
     for message in consumer:
         emoji_data = message.value
-        for i in range(0,int(emoji_data["emoji_count"])):
+        for i in range(0,int(math.ceil(emoji_data["emoji_count_aggregated"]))):
             emoji_type = emoji_data['emoji_type']
             print(f"Cluster Publisher received emoji_type: {emoji_type}")
             forward_to_subscribers(emoji_type)

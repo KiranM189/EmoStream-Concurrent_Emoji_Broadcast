@@ -5,7 +5,6 @@ import threading
 
 app = Flask(__name__)
 
-# Function to create a new consumer for each client
 def create_consumer():
     return KafkaConsumer(
         'sub_1',
@@ -18,13 +17,13 @@ def create_consumer():
 
 # Generator function for sending emojis to clients
 def send_emoji():
-    consumer = create_consumer()  # Create a new consumer for each client
+    consumer = create_consumer()  
     for msg in consumer:
-        yield f"data: {json.dumps(msg.value)}\n\n"  # Formatting as Server-Sent Events (SSE)
+        yield f"data: {json.dumps(msg.value)}\n\n"  
 
-@app.route('/sub1')
+@app.route('/sub3')
 def stream():
     return Response(send_emoji(), content_type='text/event-stream')
 
 if __name__ == '__main__':
-    app.run(debug=True, port=5050)
+    app.run(debug=True, port=5003)

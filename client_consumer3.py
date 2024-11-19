@@ -31,7 +31,7 @@ def consume_sse():
             url = "http://localhost:5000/send_emoji"
             data = {
                 "user_id": user_id,
-                "emoji_type": '😠'
+                "emoji_type": '💖'
             }
             data["timestamp"] = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
             response = requests.post(url, json=data)
